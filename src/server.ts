@@ -32,3 +32,11 @@ app.get('/', (req, res) => {
 app.listen(3000, () => {
   console.log('🚀 http://localhost:3000');
 });
+
+app.get('/health', (req, res) => {
+  res.json({ 
+    status: 'API Intel Server Live', 
+    version: '1.0.0',
+    timestamp: new Date().toISOString()
+  });
+});
