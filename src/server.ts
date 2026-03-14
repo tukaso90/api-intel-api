@@ -1,7 +1,7 @@
 import express from 'express';
 import cors from 'cors';
 import path from 'path';
-import { analyze } from 'api-intel-core';
+import { analyze } from "./api-intel-core/index.js";
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
