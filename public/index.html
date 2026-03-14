@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><head><title>API Intel</title></head><body>
+<h1>API Intel Server Live!</h1>
+<p><a href="/health">/health</a> | <strong>POST /analyze</strong></p>
+<textarea id="input" rows="10" cols="80" placeholder='{"openapi":{"openapi":"3.1.0","paths":["/users":{"get":{}}}}}'>
+</textarea><br>
+<button onclick="testAnalyze()">Test Analyze</button>
+<pre id="output"></pre>
+<script>
+async function testAnalyze() {
+  const input = document.getElementById('input').value;
+  fetch('/analyze', {
+    method: 'POST',
+    headers: {'Content-Type':'application/json'},
+    body: input
+  }).then(r=>r.text()).then(t=>document.getElementById('output').textContent=t);
+}
+</script>
+</body></html>
