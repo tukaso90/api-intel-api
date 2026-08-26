@@ -7,17 +7,11 @@ const express_1 = __importDefault(require("express"));
 const cors_1 = __importDefault(require("cors"));
 const path_1 = __importDefault(require("path"));
 const index_js_1 = require("./api-intel-core/index.js");
+const validation_js_1 = require("./validation.js");
 const app = (0, express_1.default)();
 app.use(express_1.default.json({ limit: '10mb' }));
 app.use((0, cors_1.default)({ origin: '*' }));
-app.get('/health', (req, res) => res.json({ status: 'Live!' })); // ← ADD THIS
-app.post('/analyze', (req, res) => {
-    if (!req.body.openapi && !req.body.postman) {
-        return res.status(400).json({
-            error: 'Validation failed',
-            details: [{ field: '', message: 'openapi or postman required' }]
-        });
-    }
+app.post('/analyze', validation_js_1.validateAnalyze, (req, res) => {
     try {
         const result = (0, index_js_1.analyze)(req.body);
         res.json(result);
@@ -30,6 +24,14 @@ app.use(express_1.default.static('public'));
 app.get('/', (req, res) => {
     res.sendFile(path_1.default.join(__dirname, '../public/index.html'));
 });
-app.listen(3000, () => {
-    console.log('🚀 http://localhost:3000');
+const PORT = Number(process.env.PORT) || 3000;
+app.listen(PORT, () => {
+    console.log(`🚀 http://localhost:${PORT}`);
+});
+app.get('/health', (req, res) => {
+    res.json({
+        status: 'API Intel Server Live',
+        version: '1.0.0',
+        timestamp: new Date().toISOString()
+    });
 });

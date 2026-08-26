@@ -1,7 +1,6 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.validateAnalyze = validateAnalyze;
-// @ts-nocheck
 const zod_1 = require("zod");
 const analyzeSchema = zod_1.z.object({
     openapi: zod_1.z.any().optional(),
@@ -16,12 +15,17 @@ function validateAnalyze(req, res, next) {
         next();
     }
     catch (err) {
-        res.status(400).json({
-            error: 'Validation failed',
-            details: (err.errors || []).map(e => ({
-                field: e.path.join('.'),
-                message: e.message
-            }))
-        });
+        if (err instanceof zod_1.ZodError) {
+            res.status(400).json({
+                error: 'Validation failed',
+                details: err.issues.map(e => ({
+                    field: e.path.map(String).join('.'),
+                    message: e.message
+                }))
+            });
+        }
+        else {
+            next(err);
+        }
     }
 }

@@ -1,6 +1,27 @@
 "use strict";
 Object.defineProperty(exports, "__esModule", { value: true });
 exports.computeRisk = computeRisk;
+const PII_FIELD_NAMES = ["email", "password", "ssn", "cardnumber", "card_number"];
+function collectSchemaFieldNames(schema) {
+    const names = [];
+    if (schema && typeof schema === "object" && schema.properties && typeof schema.properties === "object") {
+        Object.keys(schema.properties).forEach(k => names.push(k.toLowerCase()));
+    }
+    return names;
+}
+function hasPIIFields(schema) {
+    const names = collectSchemaFieldNames(schema);
+    return names.some(n => PII_FIELD_NAMES.some(p => n.includes(p)));
+}
+function riskLevelForScore(score) {
+    if (score >= 80)
+        return "Low";
+    if (score >= 60)
+        return "Medium";
+    if (score >= 35)
+        return "High";
+    return "Critical";
+}
 function inferEndpointFindings(ep) {
     const findings = [];
     const method = ep.method.toUpperCase();
@@ -22,18 +43,7 @@ function inferEndpointFindings(ep) {
             severity: "Medium"
         });
     }
-    const piiNames = ["email", "password", "ssn", "cardnumber", "card_number"];
-    const fieldNames = [];
-    function collectNames(obj) {
-        if (!obj || typeof obj !== "object")
-            return;
-        if (obj.properties && typeof obj.properties === "object") {
-            Object.keys(obj.properties).forEach(k => fieldNames.push(k.toLowerCase()));
-        }
-    }
-    collectNames(ep.requestSchema);
-    const hasPII = fieldNames.some(n => piiNames.some(p => n.includes(p)));
-    if (hasPII && !requiresAuth) {
+    if (hasPIIFields(ep.requestSchema) && !requiresAuth) {
         findings.push({
             code: "PII_NO_AUTH",
             message: `${method} ${ep.path} appears to expose PII fields without auth`,
@@ -53,45 +63,38 @@ function computeRisk(endpoints) {
     const perEndpoint = endpoints.map(ep => {
         const findings = inferEndpointFindings(ep);
         const severityCounts = findings.reduce((acc, f) => {
-            var _a;
-            acc[_a = f.severity] ?? (acc[_a] = 0);
-            acc[f.severity]++;
+            acc[f.severity] = (acc[f.severity] || 0) + 1;
             return acc;
         }, {});
-        // ADD hasPII calculation here (matches inferEndpointFindings)
-        const piiNames = ["email", "password", "ssn", "cardnumber", "card_number"];
-        const fieldNames = [];
-        function collectNames(obj) {
-            if (!obj || typeof obj !== "object")
-                return;
-            if (obj.properties && typeof obj.properties === "object") {
-                Object.keys(obj.properties).forEach(k => fieldNames.push(k.toLowerCase()));
-            }
-        }
-        collectNames(ep.requestSchema);
-        const hasPII = fieldNames.some(n => piiNames.some(p => n.includes(p)));
-        const score = Math.max(0, 100 - ((severityCounts.High || 0) * 25 + (severityCounts.Medium || 0) * 10));
+        const hasPII = hasPIIFields(ep.requestSchema);
+        const endpointScore = Math.max(0, 100 - ((severityCounts.High || 0) * 25 + (severityCounts.Medium || 0) * 10));
         return {
             path: ep.path,
             method: ep.method,
-            endpointScore: score,
-            endpointRiskLevel: score > 70 ? "Low" : score > 40 ? "Medium" : "High",
+            findings,
+            endpointScore,
+            endpointRiskLevel: riskLevelForScore(endpointScore),
             categoryScores: {
                 security: Math.max(0, 100 - (severityCounts.High || 0) * 30),
                 errors: findings.some(f => f.code === "NO_4XX_RESPONSES") ? 50 : 90,
-                validation: hasPII ? 60 : 90, // Now defined
+                validation: hasPII ? 60 : 90,
                 docs: findings.some(f => f.code === "NO_DOCS") ? 40 : 90
             }
         };
     });
     const totalEndpoints = endpoints.length;
-    // Just use endpoint count * average findings (simpler, no dummy needed)
-    const totalFindings = endpoints.length * 2; // ~2 findings/endpoint avg
-    const avgScore = totalEndpoints ? Math.round(perEndpoint.reduce((sum, ep) => sum + ep.endpointScore, 0) / totalEndpoints) : 0;
+    const totalFindings = perEndpoint.reduce((sum, ep) => sum + ep.findings.length, 0);
+    const healthyEndpoints = perEndpoint.filter(ep => !ep.findings.some(f => f.severity === "High" || f.severity === "Critical")).length;
+    const score = totalEndpoints
+        ? Math.round(perEndpoint.reduce((sum, ep) => sum + ep.endpointScore, 0) / totalEndpoints)
+        : 100;
+    const apiHealth = totalEndpoints ? Math.round((healthyEndpoints / totalEndpoints) * 100) : 100;
     return {
+        score,
+        riskLevel: riskLevelForScore(score),
+        apiHealth,
         totalEndpoints,
         totalFindings,
-        avgScore,
-        perEndpoint: perEndpoint
+        perEndpoint
     };
 }

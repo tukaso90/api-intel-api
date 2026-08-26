@@ -102,7 +102,6 @@ function summarizeAuth(doc, op) {
     };
 }
 function normalizeOpenApi(doc) {
-    const paths = doc.paths || doc.openapi?.startsWith('3.1') ? doc.paths : {};
     if (!doc || typeof doc !== "object" || !doc.paths)
         return [];
     const endpoints = [];
