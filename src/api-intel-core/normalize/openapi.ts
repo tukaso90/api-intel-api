@@ -114,7 +114,6 @@ effectiveSecurity.forEach((req: any) => {
 }
 
 export function normalizeOpenApi(doc: any): NormalizedEndpoint[] {
-  const paths = doc.paths || doc.openapi?.startsWith('3.1') ? doc.paths : {};
   if (!doc || typeof doc !== "object" || !doc.paths) return [];
 
   const endpoints: NormalizedEndpoint[] = [];
