@@ -8,13 +8,16 @@ declare module 'api-intel-core' {
   export interface RiskReport {
     totalEndpoints: number;
     totalFindings: number;
-    avgScore: number;
+    score: number;
+    riskLevel: "Low" | "Medium" | "High" | "Critical";
+    apiHealth: number;
     perEndpoint: Array<{
       path: string;
       method: string;
       endpointScore: number;
       endpointRiskLevel: string;
       categoryScores: Record<string, number>;
+      findings: Array<{ code: string; message: string; severity: string }>;
     }>;
   }
   

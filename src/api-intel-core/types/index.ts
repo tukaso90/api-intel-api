@@ -54,29 +54,25 @@ export interface EndpointFinding {
 
 export interface EndpointRisk {
   path: string;
-  method: string | HttpMethod;
+  method: HttpMethod;
   endpointScore: number;
-  endpointRiskLevel: string;
+  endpointRiskLevel: "Low" | "Medium" | "High" | "Critical";
   categoryScores: {
     security: number;
     errors: number;
     validation: number;
     docs: number;
   };
-  findings: EndpointFinding[]; // NEW
+  findings: EndpointFinding[];
 }
 
-
 export interface RiskReport {
+  totalEndpoints: number;
+  totalFindings: number;
   score: number;
   riskLevel: "Low" | "Medium" | "High" | "Critical";
   apiHealth: number;
-  perEndpoint: Array<
-    {
-      path: string;
-      method: HttpMethod;
-    } & EndpointRisk
-  >;
+  perEndpoint: EndpointRisk[];
 }
 
 export interface CoverageReport {
