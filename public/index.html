@@ -1,19 +1,348 @@
 <!DOCTYPE html>
-<html><head><title>API Intel</title></head><body>
-<h1>API Intel Server Live!</h1>
-<p><a href="/health">/health</a> | <strong>POST /analyze</strong></p>
-<textarea id="input" rows="10" cols="80" placeholder='{"openapi":{"openapi":"3.1.0","paths":["/users":{"get":{}}}}}'>
-</textarea><br>
-<button onclick="testAnalyze()">Test Analyze</button>
-<pre id="output"></pre>
-<script>
-async function testAnalyze() {
-  const input = document.getElementById('input').value;
-  fetch('/analyze', {
-    method: 'POST',
-    headers: {'Content-Type':'application/json'},
-    body: input
-  }).then(r=>r.text()).then(t=>document.getElementById('output').textContent=t);
-}
-</script>
-</body></html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>API Intel</title>
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: { gray: { 950: '#0a0a0f' } }
+        }
+      }
+    }
+  </script>
+</head>
+<body class="min-h-screen bg-gray-950 text-gray-100 font-sans antialiased">
+
+  <!-- Header -->
+  <header class="border-b border-gray-800 bg-gray-950/80 backdrop-blur sticky top-0 z-10">
+    <div class="max-w-7xl mx-auto px-6 py-4 flex items-center gap-3">
+      <div class="w-8 h-8 bg-indigo-600 rounded-lg flex items-center justify-center flex-shrink-0">
+        <svg class="w-4 h-4 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+          <path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" />
+        </svg>
+      </div>
+      <div>
+        <h1 class="text-base font-bold text-white leading-none">API Intel</h1>
+        <p class="text-xs text-gray-500 mt-0.5">API Risk Analyzer</p>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main -->
+  <main class="max-w-7xl mx-auto px-6 py-8">
+    <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+
+      <!-- Input Panel -->
+      <div class="space-y-4">
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">OpenAPI Spec <span class="text-gray-500 font-normal">(JSON)</span></label>
+          <textarea id="openapiInput" rows="14"
+            class="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm font-mono text-gray-200 placeholder-gray-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none transition-colors"
+            placeholder='Paste your OpenAPI 3.x spec here...'></textarea>
+        </div>
+        <div>
+          <label class="block text-sm font-medium text-gray-300 mb-2">
+            Postman Collection
+            <span class="text-gray-500 font-normal">(JSON, optional)</span>
+          </label>
+          <textarea id="postmanInput" rows="5"
+            class="w-full bg-gray-900 border border-gray-700 rounded-xl p-4 text-sm font-mono text-gray-200 placeholder-gray-600 focus:outline-none focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 resize-none transition-colors"
+            placeholder='Paste your Postman collection here...'></textarea>
+        </div>
+        <button id="analyzeBtn" onclick="runAnalyze()"
+          class="w-full bg-indigo-600 hover:bg-indigo-500 disabled:opacity-50 disabled:cursor-not-allowed text-white font-semibold py-3 px-6 rounded-xl transition-colors flex items-center justify-center gap-2">
+          <svg id="btnIcon" class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+            <path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />
+          </svg>
+          <span id="btnText">Analyze</span>
+        </button>
+        <div id="errorBox" class="hidden bg-red-950 border border-red-800 rounded-xl p-4 text-red-300 text-sm"></div>
+      </div>
+
+      <!-- Results Panel -->
+      <div id="results" class="hidden space-y-4">
+
+        <!-- Score Card -->
+        <div class="bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <div class="flex items-center justify-between mb-5">
+            <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider">Risk Report</h2>
+            <span id="riskBadge" class="px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide"></span>
+          </div>
+          <div class="flex items-end gap-2 mb-5">
+            <div id="scoreValue" class="text-7xl font-bold tabular-nums leading-none"></div>
+            <div class="text-gray-600 text-2xl mb-1">/100</div>
+          </div>
+          <div class="grid grid-cols-3 gap-4 pt-5 border-t border-gray-800">
+            <div>
+              <div id="totalEndpoints" class="text-2xl font-bold text-white tabular-nums"></div>
+              <div class="text-xs text-gray-500 mt-0.5">Endpoints</div>
+            </div>
+            <div>
+              <div id="totalFindings" class="text-2xl font-bold text-white tabular-nums"></div>
+              <div class="text-xs text-gray-500 mt-0.5">Findings</div>
+            </div>
+            <div>
+              <div id="apiHealth" class="text-2xl font-bold text-white tabular-nums"></div>
+              <div class="text-xs text-gray-500 mt-0.5">Healthy</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Coverage Card -->
+        <div id="coverageCard" class="hidden bg-gray-900 border border-gray-800 rounded-xl p-6">
+          <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-4">Postman Coverage</h2>
+          <div class="flex items-end gap-2 mb-3">
+            <div id="coveragePct" class="text-4xl font-bold text-white tabular-nums"></div>
+            <div class="text-gray-500 text-lg mb-1">% covered</div>
+          </div>
+          <div class="w-full bg-gray-800 rounded-full h-2 mb-4">
+            <div id="coverageBar" class="bg-indigo-500 h-2 rounded-full transition-all duration-500"></div>
+          </div>
+          <div class="grid grid-cols-2 gap-4 text-sm">
+            <div class="bg-gray-800 rounded-lg p-3">
+              <div id="coveredCount" class="text-lg font-bold text-white tabular-nums"></div>
+              <div class="text-xs text-gray-500 mt-0.5">Covered by Postman</div>
+            </div>
+            <div class="bg-gray-800 rounded-lg p-3">
+              <div id="securedWithout" class="text-lg font-bold text-amber-400 tabular-nums"></div>
+              <div class="text-xs text-gray-500 mt-0.5">Secured, not tested</div>
+            </div>
+          </div>
+        </div>
+
+        <!-- Endpoints List -->
+        <div>
+          <h2 class="text-sm font-semibold text-gray-400 uppercase tracking-wider mb-3">Endpoints</h2>
+          <div id="endpointsList" class="space-y-2"></div>
+        </div>
+
+      </div>
+    </div>
+  </main>
+
+  <script>
+    // ── helpers ──────────────────────────────────────────────────────────────
+
+    const METHOD_COLORS = {
+      get:     'bg-emerald-900 text-emerald-300 border-emerald-700',
+      post:    'bg-blue-900 text-blue-300 border-blue-700',
+      put:     'bg-amber-900 text-amber-300 border-amber-700',
+      patch:   'bg-orange-900 text-orange-300 border-orange-700',
+      delete:  'bg-red-900 text-red-300 border-red-700',
+      head:    'bg-gray-800 text-gray-300 border-gray-700',
+      options: 'bg-gray-800 text-gray-300 border-gray-700',
+      trace:   'bg-gray-800 text-gray-300 border-gray-700',
+    };
+
+    function riskColor(level) {
+      return {
+        Low:      'text-emerald-400',
+        Medium:   'text-amber-400',
+        High:     'text-orange-400',
+        Critical: 'text-red-400',
+      }[level] || 'text-gray-400';
+    }
+
+    function riskBadgeClass(level) {
+      return {
+        Low:      'bg-emerald-900 text-emerald-300 border border-emerald-700',
+        Medium:   'bg-amber-900 text-amber-300 border border-amber-700',
+        High:     'bg-orange-900 text-orange-300 border border-orange-700',
+        Critical: 'bg-red-900 text-red-300 border border-red-700',
+      }[level] || 'bg-gray-800 text-gray-300 border border-gray-700';
+    }
+
+    function severityDot(severity) {
+      const colors = {
+        Critical: 'bg-red-500',
+        High:     'bg-orange-500',
+        Medium:   'bg-amber-500',
+        Low:      'bg-blue-500',
+        Info:     'bg-gray-500',
+      };
+      return `<span class="inline-block w-2 h-2 rounded-full ${colors[severity] || 'bg-gray-500'} flex-shrink-0 mt-1.5"></span>`;
+    }
+
+    function scoreTextColor(score) {
+      if (score >= 80) return 'text-emerald-400';
+      if (score >= 60) return 'text-amber-400';
+      if (score >= 35) return 'text-orange-400';
+      return 'text-red-400';
+    }
+
+    // ── UI state ─────────────────────────────────────────────────────────────
+
+    function setLoading(on) {
+      const btn = document.getElementById('analyzeBtn');
+      const icon = document.getElementById('btnIcon');
+      const text = document.getElementById('btnText');
+      btn.disabled = on;
+      text.textContent = on ? 'Analyzing…' : 'Analyze';
+      icon.innerHTML = on
+        ? `<circle cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" class="opacity-25"></circle>
+           <path fill="currentColor" class="opacity-75" d="M4 12a8 8 0 018-8v8z"></path>`
+        : `<path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" />`;
+      if (on) {
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.removeAttribute('stroke');
+      } else {
+        icon.setAttribute('viewBox', '0 0 24 24');
+        icon.setAttribute('stroke', 'currentColor');
+      }
+    }
+
+    function showError(msg) {
+      const box = document.getElementById('errorBox');
+      box.textContent = msg;
+      box.classList.remove('hidden');
+    }
+
+    function hideError() {
+      document.getElementById('errorBox').classList.add('hidden');
+    }
+
+    // ── render ───────────────────────────────────────────────────────────────
+
+    function renderResults(data) {
+      const { riskReport, coverageReport } = data;
+
+      document.getElementById('results').classList.remove('hidden');
+
+      // Score
+      const scoreEl = document.getElementById('scoreValue');
+      scoreEl.textContent = riskReport.score;
+      scoreEl.className = `text-7xl font-bold tabular-nums leading-none ${scoreTextColor(riskReport.score)}`;
+
+      // Badge
+      const badge = document.getElementById('riskBadge');
+      badge.textContent = riskReport.riskLevel;
+      badge.className = `px-3 py-1 rounded-full text-xs font-bold uppercase tracking-wide ${riskBadgeClass(riskReport.riskLevel)}`;
+
+      // Stats
+      document.getElementById('totalEndpoints').textContent = riskReport.totalEndpoints;
+      document.getElementById('totalFindings').textContent = riskReport.totalFindings;
+      document.getElementById('apiHealth').textContent = riskReport.apiHealth + '%';
+
+      // Coverage
+      if (coverageReport && coverageReport.totalSpec > 0) {
+        document.getElementById('coverageCard').classList.remove('hidden');
+        document.getElementById('coveragePct').textContent = coverageReport.percentCovered;
+        document.getElementById('coverageBar').style.width = coverageReport.percentCovered + '%';
+        document.getElementById('coveredCount').textContent =
+          `${coverageReport.coveredByPostman} / ${coverageReport.totalSpec}`;
+        document.getElementById('securedWithout').textContent = coverageReport.securedWithoutPostman;
+      }
+
+      // Endpoints
+      renderEndpoints(riskReport.perEndpoint);
+    }
+
+    function renderEndpoints(endpoints) {
+      const list = document.getElementById('endpointsList');
+      list.innerHTML = '';
+
+      if (!endpoints || endpoints.length === 0) {
+        list.innerHTML = '<p class="text-gray-600 text-sm">No endpoints found.</p>';
+        return;
+      }
+
+      // Sort: highest risk first
+      const sorted = [...endpoints].sort((a, b) => a.endpointScore - b.endpointScore);
+
+      sorted.forEach((ep, i) => {
+        const hasFindings = ep.findings && ep.findings.length > 0;
+        const methodClass = METHOD_COLORS[ep.method.toLowerCase()] || METHOD_COLORS.get;
+        const id = `ep-${i}`;
+
+        const findingsHtml = hasFindings
+          ? ep.findings.map(f => `
+              <div class="flex gap-2 items-start text-sm">
+                ${severityDot(f.severity)}
+                <div>
+                  <span class="font-mono text-xs text-gray-500 mr-1">[${f.code}]</span>
+                  <span class="text-gray-300">${f.message}</span>
+                </div>
+              </div>`).join('')
+          : '<p class="text-sm text-emerald-600">No findings — looks good.</p>';
+
+        const card = document.createElement('div');
+        card.className = 'bg-gray-900 border border-gray-800 rounded-xl overflow-hidden';
+        card.innerHTML = `
+          <button onclick="toggleEndpoint('${id}')"
+            class="w-full flex items-center gap-3 px-4 py-3 hover:bg-gray-800 transition-colors text-left">
+            <span class="text-xs font-bold uppercase px-2 py-0.5 rounded border font-mono ${methodClass}">
+              ${ep.method}
+            </span>
+            <span class="font-mono text-sm text-gray-200 flex-1 truncate">${ep.path}</span>
+            <div class="flex items-center gap-2 flex-shrink-0">
+              <span class="text-sm font-bold tabular-nums ${scoreTextColor(ep.endpointScore)}">${ep.endpointScore}</span>
+              <span class="text-xs px-2 py-0.5 rounded-full ${riskBadgeClass(ep.endpointRiskLevel)}">${ep.endpointRiskLevel}</span>
+              <svg id="${id}-chevron" class="w-4 h-4 text-gray-600 transition-transform" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+                <path stroke-linecap="round" stroke-linejoin="round" d="M19.5 8.25l-7.5 7.5-7.5-7.5" />
+              </svg>
+            </div>
+          </button>
+          <div id="${id}" class="hidden border-t border-gray-800 px-4 py-4 space-y-2">
+            ${findingsHtml}
+          </div>
+        `;
+        list.appendChild(card);
+      });
+    }
+
+    function toggleEndpoint(id) {
+      const panel = document.getElementById(id);
+      const chevron = document.getElementById(id + '-chevron');
+      const hidden = panel.classList.toggle('hidden');
+      chevron.style.transform = hidden ? '' : 'rotate(180deg)';
+    }
+
+    // ── main ─────────────────────────────────────────────────────────────────
+
+    async function runAnalyze() {
+      const openapiRaw = document.getElementById('openapiInput').value.trim();
+      const postmanRaw = document.getElementById('postmanInput').value.trim();
+
+      if (!openapiRaw && !postmanRaw) {
+        showError('Paste an OpenAPI spec or Postman collection to analyze.');
+        return;
+      }
+
+      const body = {};
+      if (openapiRaw) {
+        try { body.openapi = JSON.parse(openapiRaw); }
+        catch { showError('Invalid JSON in the OpenAPI field.'); return; }
+      }
+      if (postmanRaw) {
+        try { body.postman = JSON.parse(postmanRaw); }
+        catch { showError('Invalid JSON in the Postman field.'); return; }
+      }
+
+      setLoading(true);
+      hideError();
+
+      try {
+        const res = await fetch('/analyze', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(body),
+        });
+        const data = await res.json();
+        if (!res.ok) {
+          showError(data.error || 'Analysis failed.');
+          return;
+        }
+        renderResults(data);
+      } catch {
+        showError('Could not reach the server.');
+      } finally {
+        setLoading(false);
+      }
+    }
+  </script>
+</body>
+</html>
