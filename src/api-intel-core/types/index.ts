@@ -67,11 +67,11 @@ export interface EndpointRisk {
 }
 
 export interface RiskReport {
-  totalEndpoints: number;
-  totalFindings: number;
   score: number;
   riskLevel: "Low" | "Medium" | "High" | "Critical";
   apiHealth: number;
+  totalEndpoints: number;
+  totalFindings: number;
   perEndpoint: EndpointRisk[];
 }
 

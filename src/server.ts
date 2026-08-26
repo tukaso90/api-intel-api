@@ -7,8 +7,6 @@ const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(cors({ origin: '*' }));
 
-app.get('/health', (req, res) => res.json({ status: 'Live!' }));  // ← ADD THIS
-
 app.post('/analyze', (req, res) => {
   if (!req.body.openapi && !req.body.postman) {
     return res.status(400).json({

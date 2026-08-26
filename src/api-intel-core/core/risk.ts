@@ -3,7 +3,6 @@ import {
   EndpointFinding,
   EndpointRisk,
   RiskReport,
-  FindingSeverity,
   HttpMethod
 } from "../types";
 
@@ -81,7 +80,6 @@ export function computeRisk(endpoints: NormalizedEndpoint[]): RiskReport {
     }, {} as Record<string, number>);
 
     const hasPII = hasPIIFields(ep.requestSchema);
-
     const endpointScore = Math.max(
       0,
       100 - ((severityCounts.High || 0) * 25 + (severityCounts.Medium || 0) * 10)
@@ -90,6 +88,7 @@ export function computeRisk(endpoints: NormalizedEndpoint[]): RiskReport {
     return {
       path: ep.path,
       method: ep.method,
+      findings,
       endpointScore,
       endpointRiskLevel: riskLevelForScore(endpointScore),
       categoryScores: {
@@ -97,8 +96,7 @@ export function computeRisk(endpoints: NormalizedEndpoint[]): RiskReport {
         errors: findings.some(f => f.code === "NO_4XX_RESPONSES") ? 50 : 90,
         validation: hasPII ? 60 : 90,
         docs: findings.some(f => f.code === "NO_DOCS") ? 40 : 90
-      },
-      findings
+      }
     };
   });
 
@@ -115,11 +113,11 @@ export function computeRisk(endpoints: NormalizedEndpoint[]): RiskReport {
   const apiHealth = totalEndpoints ? Math.round((healthyEndpoints / totalEndpoints) * 100) : 100;
 
   return {
-    totalEndpoints,
-    totalFindings,
     score,
     riskLevel: riskLevelForScore(score),
     apiHealth,
+    totalEndpoints,
+    totalFindings,
     perEndpoint
   };
 }
