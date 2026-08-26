@@ -2,18 +2,13 @@ import express from 'express';
 import cors from 'cors';
 import path from 'path';
 import { analyze } from "./api-intel-core/index.js";
+import { validateAnalyze } from "./validation.js";
 
 const app = express();
 app.use(express.json({ limit: '10mb' }));
 app.use(cors({ origin: '*' }));
 
-app.post('/analyze', (req, res) => {
-  if (!req.body.openapi && !req.body.postman) {
-    return res.status(400).json({
-      error: 'Validation failed',
-      details: [{ field: '', message: 'openapi or postman required' }]
-    });
-  }
+app.post('/analyze', validateAnalyze, (req, res) => {
   try {
     const result = analyze(req.body);
     res.json(result);

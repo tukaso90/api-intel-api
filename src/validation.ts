@@ -1,5 +1,5 @@
-// @ts-nocheck
-import { z } from 'zod';
+import { z, ZodError } from 'zod';
+import { Request, Response, NextFunction } from 'express';
 
 const analyzeSchema = z.object({
   openapi: z.any().optional(),
@@ -9,17 +9,21 @@ const analyzeSchema = z.object({
   message: 'At least one of openapi or postman must be provided'
 });
 
-export function validateAnalyze(req, res, next) {
+export function validateAnalyze(req: Request, res: Response, next: NextFunction): void {
   try {
     req.body = analyzeSchema.parse(req.body);
     next();
   } catch (err) {
-    res.status(400).json({
-      error: 'Validation failed',
-      details: (err.errors || []).map(e => ({
-        field: e.path.join('.'),
-        message: e.message
-      }))
-    });
+    if (err instanceof ZodError) {
+      res.status(400).json({
+        error: 'Validation failed',
+        details: err.issues.map(e => ({
+          field: e.path.map(String).join('.'),
+          message: e.message
+        }))
+      });
+    } else {
+      next(err);
+    }
   }
 }
