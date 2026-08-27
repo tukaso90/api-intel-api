@@ -173,12 +173,81 @@ function applyParamValue(base: HappyPathBase, param: NormalizedParam, value: any
   return next;
 }
 
-function applyBodyField(base: HappyPathBase, field: string, value: any): HappyPathBase {
+function setAtPath(obj: any, path: string[], value: any): any {
+  if (path.length === 0) return value;
+  const [head, ...rest] = path;
+  const clone = obj && typeof obj === "object" ? { ...obj } : {};
+  clone[head] = setAtPath(obj ? obj[head] : undefined, rest, value);
+  return clone;
+}
+
+function deleteAtPath(obj: any, path: string[]): any {
+  if (!obj || typeof obj !== "object") return obj;
+  const [head, ...rest] = path;
+  const clone = { ...obj };
+  if (rest.length === 0) {
+    delete clone[head];
+  } else {
+    clone[head] = deleteAtPath(obj[head], rest);
+  }
+  return clone;
+}
+
+function applyBodyField(base: HappyPathBase, path: string[], value: any): HappyPathBase {
   const next = cloneBase(base);
   if (next.body && typeof next.body === "object") {
-    next.body[field] = value;
+    next.body = setAtPath(next.body, path, value);
   }
   return next;
+}
+
+function deleteBodyField(base: HappyPathBase, path: string[]): HappyPathBase {
+  const next = cloneBase(base);
+  if (next.body && typeof next.body === "object") {
+    next.body = deleteAtPath(next.body, path);
+  }
+  return next;
+}
+
+function isObjectSchema(schema: any): boolean {
+  return !!schema && typeof schema === "object" &&
+    (schema.type === "object" || (!schema.type && !!schema.properties));
+}
+
+interface FieldDescriptor {
+  path: string[];
+  label: string;
+  schema: any;
+  required: boolean;
+}
+
+// Walks an object schema (and any nested object properties) into a flat list
+// of field descriptors, so mutation generation doesn't care how deep a field
+// sits — "address.zip" is handled exactly like a top-level field.
+function collectFields(schema: any, path: string[] = [], depth = 0): FieldDescriptor[] {
+  if (!isObjectSchema(schema) || depth > 5) return [];
+
+  const properties = schema.properties || {};
+  const requiredList: string[] = Array.isArray(schema.required) ? schema.required : [];
+
+  const fields: FieldDescriptor[] = [];
+  Object.keys(properties).forEach(key => {
+    const fieldSchema = properties[key];
+    const fieldPath = [...path, key];
+
+    fields.push({
+      path: fieldPath,
+      label: fieldPath.join("."),
+      schema: fieldSchema,
+      required: requiredList.includes(key)
+    });
+
+    if (isObjectSchema(fieldSchema)) {
+      fields.push(...collectFields(fieldSchema, fieldPath, depth + 1));
+    }
+  });
+
+  return fields;
 }
 
 function buildHappyPathBase(ep: NormalizedEndpoint): HappyPathBase {
@@ -310,64 +379,45 @@ export function generateTestCases(endpoints: NormalizedEndpoint[]): GeneratedTes
       });
     });
 
-    const bodyProperties: Record<string, any> =
-      (ep.requestSchema && typeof ep.requestSchema === "object" && ep.requestSchema.properties) || {};
-    const requiredFields: string[] = Array.isArray(ep.requestSchema?.required)
-      ? ep.requestSchema.required
-      : [];
-    const optionalFields: string[] = Object.keys(bodyProperties).filter(
-      f => !requiredFields.includes(f)
-    );
+    // flat list of every declared field, at any nesting depth — a field's
+    // path (e.g. ["address", "zip"]) is all mutation application needs to
+    // know, so top-level and nested fields go through identical logic
+    const fields = collectFields(ep.requestSchema);
 
-    requiredFields.forEach(field => {
+    fields.forEach(fieldDesc => {
       if (!base.body || typeof base.body !== "object") return;
-      const negativeBody = { ...base.body };
-      delete negativeBody[field];
+      const { path, label, schema: fieldSchema, required } = fieldDesc;
 
-      const negativeBase: HappyPathBase = {
-        pathParams: { ...base.pathParams },
-        queryParams: { ...base.queryParams },
-        headers: { ...base.headers },
-        body: negativeBody
-      };
-
-      testCases.push(
-        makeCase(
-          ep,
-          index++,
-          "negative",
-          `missing required field: ${field}`,
-          negativeBase,
-          pickStatus(ep, "validation")
-        )
-      );
-
-      const fieldSchema = bodyProperties[field];
-      if (!fieldSchema) return;
-
-      const enumMut = enumMutation(fieldSchema);
-      if (enumMut) {
+      if (required) {
         testCases.push(
           makeCase(
             ep,
             index++,
             "negative",
-            `field ${field}: ${enumMut.reasonSuffix}`,
-            applyBodyField(base, field, enumMut.value),
+            `missing required field: ${label}`,
+            deleteBodyField(base, path),
             pickStatus(ep, "validation")
           )
         );
+
+        const enumMut = enumMutation(fieldSchema);
+        if (enumMut) {
+          testCases.push(
+            makeCase(
+              ep,
+              index++,
+              "negative",
+              `field ${label}: ${enumMut.reasonSuffix}`,
+              applyBodyField(base, path, enumMut.value),
+              pickStatus(ep, "validation")
+            )
+          );
+        }
       }
-    });
 
-    // type-mismatch and boundary cases apply to every declared field, required
-    // or not — an optional field sent with a malformed value should still be
-    // rejected by the API
-    [...requiredFields, ...optionalFields].forEach(field => {
-      if (!base.body || typeof base.body !== "object") return;
-      const fieldSchema = bodyProperties[field];
-      if (!fieldSchema) return;
-
+      // type-mismatch and boundary cases apply to every declared field,
+      // required or not — an optional field sent with a malformed value
+      // should still be rejected by the API
       const mismatch = typeMismatchMutation(fieldSchema);
       if (mismatch) {
         testCases.push(
@@ -375,8 +425,8 @@ export function generateTestCases(endpoints: NormalizedEndpoint[]): GeneratedTes
             ep,
             index++,
             "negative",
-            `field ${field}: ${mismatch.reasonSuffix}`,
-            applyBodyField(base, field, mismatch.value),
+            `field ${label}: ${mismatch.reasonSuffix}`,
+            applyBodyField(base, path, mismatch.value),
             pickStatus(ep, "validation")
           )
         );
@@ -388,8 +438,8 @@ export function generateTestCases(endpoints: NormalizedEndpoint[]): GeneratedTes
             ep,
             index++,
             "negative",
-            `field ${field}: ${mutation.reasonSuffix}`,
-            applyBodyField(base, field, mutation.value),
+            `field ${label}: ${mutation.reasonSuffix}`,
+            applyBodyField(base, path, mutation.value),
             pickStatus(ep, "validation")
           )
         );
