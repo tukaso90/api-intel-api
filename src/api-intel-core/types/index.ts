@@ -84,6 +84,21 @@ export interface CoverageReport {
 }
 
 
+export type TestCaseCategory = "happy" | "negative";
+
+export interface GeneratedTestCase {
+  id: string;
+  method: HttpMethod;
+  path: string;
+  category: TestCaseCategory;
+  reason: string;
+  headers: Record<string, string>;
+  pathParams: Record<string, string>;
+  queryParams: Record<string, string>;
+  body: any | null;
+  expectedStatus: number;
+}
+
 export interface AnalyzeInput {
   openapi?: unknown;
   postman?: unknown;
@@ -96,4 +111,6 @@ export interface AnalyzeOutput {
   coverageReport: CoverageReport;
   // optional: map of contract issues per endpoint key
   contractFindings: Record<string, string[]>;
+  testCases: GeneratedTestCase[];
+  postmanCollection: Record<string, any>;
 }

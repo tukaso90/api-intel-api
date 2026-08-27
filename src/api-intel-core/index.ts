@@ -6,6 +6,8 @@ import { normalizePostman } from "./normalize/postman";
 import { computeRisk } from "./core/risk";
 import { computeCoverage } from "./coverage/coverage";
 import { contractCheckAll } from "./core/contract";
+import { generateTestCases } from "./testgen/testgen";
+import { toPostmanCollection } from "./testgen/postmanExport";
 
 export function analyze(input: AnalyzeInput): AnalyzeOutput {
   const openapi = input.openapi || {};
@@ -25,10 +27,16 @@ const riskReport = computeRisk(specEndpoints);
   // 4) contract
   const contractFindings = contractCheckAll(openapi as any, specEndpoints, postmanEndpoints);
 
+  // 5) test case generation
+  const testCases = generateTestCases(specEndpoints);
+  const postmanCollection = toPostmanCollection(testCases);
+
   return {
     endpoints: specEndpoints,
     riskReport,
     coverageReport,
-    contractFindings
+    contractFindings,
+    testCases,
+    postmanCollection
   };
 }
