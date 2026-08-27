@@ -238,33 +238,50 @@ export function generateTestCases(endpoints: NormalizedEndpoint[]): GeneratedTes
     );
 
     (ep.params || []).forEach(param => {
-      if (!param.required) return;
+      if (param.required) {
+        const negativeBase: HappyPathBase = {
+          pathParams: { ...base.pathParams },
+          queryParams: { ...base.queryParams },
+          headers: { ...base.headers },
+          body: base.body
+        };
 
-      const negativeBase: HappyPathBase = {
-        pathParams: { ...base.pathParams },
-        queryParams: { ...base.queryParams },
-        headers: { ...base.headers },
-        body: base.body
-      };
+        if (param.in === "path") delete negativeBase.pathParams[param.name];
+        else if (param.in === "query") delete negativeBase.queryParams[param.name];
+        else if (param.in === "header") delete negativeBase.headers[param.name];
 
-      if (param.in === "path") delete negativeBase.pathParams[param.name];
-      else if (param.in === "query") delete negativeBase.queryParams[param.name];
-      else if (param.in === "header") delete negativeBase.headers[param.name];
+        testCases.push(
+          makeCase(
+            ep,
+            index++,
+            "negative",
+            `missing required ${param.in} param: ${param.name}`,
+            negativeBase,
+            pickStatus(ep, "validation")
+          )
+        );
 
-      testCases.push(
-        makeCase(
-          ep,
-          index++,
-          "negative",
-          `missing required ${param.in} param: ${param.name}`,
-          negativeBase,
-          pickStatus(ep, "validation")
-        )
-      );
+        const enumMut = enumMutation(param.schema);
+        if (enumMut) {
+          testCases.push(
+            makeCase(
+              ep,
+              index++,
+              "negative",
+              `${param.in} param ${param.name}: ${enumMut.reasonSuffix}`,
+              applyParamValue(base, param, enumMut.value),
+              pickStatus(ep, "validation")
+            )
+          );
+        }
+      }
+
+      // type-mismatch and boundary cases apply regardless of required/optional —
+      // an optional param sent with a malformed value should still be rejected
+      const schema = param.schema;
 
       // type-mismatch is meaningless for string params — everything on the
       // wire is already a string, so skip it there
-      const schema = param.schema;
       const mismatch = schema && schema.type !== "string" ? typeMismatchMutation(schema) : null;
       if (mismatch) {
         testCases.push(
@@ -274,20 +291,6 @@ export function generateTestCases(endpoints: NormalizedEndpoint[]): GeneratedTes
             "negative",
             `${param.in} param ${param.name}: ${mismatch.reasonSuffix}`,
             applyParamValue(base, param, mismatch.value),
-            pickStatus(ep, "validation")
-          )
-        );
-      }
-
-      const enumMut = enumMutation(schema);
-      if (enumMut) {
-        testCases.push(
-          makeCase(
-            ep,
-            index++,
-            "negative",
-            `${param.in} param ${param.name}: ${enumMut.reasonSuffix}`,
-            applyParamValue(base, param, enumMut.value),
             pickStatus(ep, "validation")
           )
         );
@@ -307,9 +310,14 @@ export function generateTestCases(endpoints: NormalizedEndpoint[]): GeneratedTes
       });
     });
 
+    const bodyProperties: Record<string, any> =
+      (ep.requestSchema && typeof ep.requestSchema === "object" && ep.requestSchema.properties) || {};
     const requiredFields: string[] = Array.isArray(ep.requestSchema?.required)
       ? ep.requestSchema.required
       : [];
+    const optionalFields: string[] = Object.keys(bodyProperties).filter(
+      f => !requiredFields.includes(f)
+    );
 
     requiredFields.forEach(field => {
       if (!base.body || typeof base.body !== "object") return;
@@ -334,7 +342,30 @@ export function generateTestCases(endpoints: NormalizedEndpoint[]): GeneratedTes
         )
       );
 
-      const fieldSchema = ep.requestSchema?.properties?.[field];
+      const fieldSchema = bodyProperties[field];
+      if (!fieldSchema) return;
+
+      const enumMut = enumMutation(fieldSchema);
+      if (enumMut) {
+        testCases.push(
+          makeCase(
+            ep,
+            index++,
+            "negative",
+            `field ${field}: ${enumMut.reasonSuffix}`,
+            applyBodyField(base, field, enumMut.value),
+            pickStatus(ep, "validation")
+          )
+        );
+      }
+    });
+
+    // type-mismatch and boundary cases apply to every declared field, required
+    // or not — an optional field sent with a malformed value should still be
+    // rejected by the API
+    [...requiredFields, ...optionalFields].forEach(field => {
+      if (!base.body || typeof base.body !== "object") return;
+      const fieldSchema = bodyProperties[field];
       if (!fieldSchema) return;
 
       const mismatch = typeMismatchMutation(fieldSchema);
@@ -346,20 +377,6 @@ export function generateTestCases(endpoints: NormalizedEndpoint[]): GeneratedTes
             "negative",
             `field ${field}: ${mismatch.reasonSuffix}`,
             applyBodyField(base, field, mismatch.value),
-            pickStatus(ep, "validation")
-          )
-        );
-      }
-
-      const enumMut = enumMutation(fieldSchema);
-      if (enumMut) {
-        testCases.push(
-          makeCase(
-            ep,
-            index++,
-            "negative",
-            `field ${field}: ${enumMut.reasonSuffix}`,
-            applyBodyField(base, field, enumMut.value),
             pickStatus(ep, "validation")
           )
         );
